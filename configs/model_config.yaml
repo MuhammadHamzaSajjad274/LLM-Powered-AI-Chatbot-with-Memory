@@ -1,0 +1,49 @@
+# LLM-Powered AI Chatbot Configuration
+
+# LLM Configuration
+llm:
+  type: "huggingface"  # Options: "local", "openai", "deepseek", "huggingface"
+  model_name: "mistral-7b-instruct-v0.2"  # For local mode
+  temperature: 0.7
+  max_tokens: 512
+  context_window: 4096
+
+# Local LLM Configuration (for ctransformers/llama-cpp-python)
+local_llm:
+  model_path: "models/mistral-7b-instruct-v0.2.Q4_K_M.gguf"  # Path to local model file (e.g., .gguf file)
+  model_type: "mistral"  # Model architecture type
+  gpu_layers: 0  # Number of layers to offload to GPU (0 = CPU only)
+
+# OpenAI Configuration
+openai:
+  api_key: ""  # Set via environment variable: OPENAI_API_KEY
+  model_name: "gpt-3.5-turbo"
+
+# Deepseek Configuration
+deepseek:
+  api_key: ""  # Set via environment variable: DEEPSEEK_API_KEY
+  model_name: "deepseek-chat"
+  base_url: "https://api.deepseek.com"
+
+# HuggingFace Configuration
+huggingface:
+  model_name: "mistralai/Mistral-7B-Instruct-v0.2"
+  api_token: ""  # Set via HF_API_TOKEN environment variable
+
+# Embeddings Configuration
+embeddings:
+  model_name: "sentence-transformers/all-MiniLM-L6-v2"
+  device: "cpu"  # Options: "cpu", "cuda"
+
+# Memory Configuration
+memory:
+  collection_name: "long_term_chat_memory"
+  vectorstore_path: "vectorstore/chroma_db"
+  top_k: 3  # Number of historical chunks to retrieve for RAG
+  summarization_threshold: 20  # Number of user-assistant turns before summarization
+
+# ChromaDB Configuration
+chromadb:
+  persist_directory: "vectorstore/chroma_db"
+
+
