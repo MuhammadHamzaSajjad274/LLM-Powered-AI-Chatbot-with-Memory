@@ -21,8 +21,7 @@ streaming output, and MLflow observability — built for production.**
 
 ## 📸 Preview
 
-> *Gradient animated UI with glassmorphism design, streaming responses, 
-> and a live observability dashboard.*
+![App Preview](assets/preview.png)
 
 ---
 
