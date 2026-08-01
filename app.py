@@ -7,9 +7,16 @@ import html
 from datetime import datetime
 
 import streamlit as st
-
+import os
 from main import ChatbotPipeline
 
+
+
+# Bridge Streamlit Cloud secrets to environment variables
+if hasattr(st, 'secrets'):
+    for key, value in st.secrets.items():
+        if isinstance(value, str):
+            os.environ[key] = value
 st.set_page_config(
     page_title="AI Chatbot",
     page_icon="🤖",
