@@ -4,6 +4,7 @@ Stunning animated glassmorphism interface with RAG pipeline backend.
 """
 
 import html
+import textwrap
 from datetime import datetime
 
 import streamlit as st
@@ -625,28 +626,28 @@ def render_message_html(role: str, content: str, timestamp: str) -> str:
     row_cls = "user" if role == "user" else "assistant"
     bubble_cls = "user" if role == "user" else "assistant"
 
-    return f"""
-    <div class="msg-row {row_cls}">
-        <div class="msg-avatar">{avatar}</div>
-        <div class="msg-bubble-wrap">
-            <div class="msg-bubble {bubble_cls}">{safe}</div>
-            <div class="msg-timestamp">{html.escape(timestamp)}</div>
+    return textwrap.dedent(f"""
+        <div class="msg-row {row_cls}">
+            <div class="msg-avatar">{avatar}</div>
+            <div class="msg-bubble-wrap">
+                <div class="msg-bubble {bubble_cls}">{safe}</div>
+                <div class="msg-timestamp">{html.escape(timestamp)}</div>
+            </div>
         </div>
-    </div>
-    """
+    """).strip()
 
 
 def render_typing_html() -> str:
-    return """
-    <div class="msg-row assistant">
-        <div class="msg-avatar">🤖</div>
-        <div class="msg-bubble-wrap">
-            <div class="typing-indicator">
-                <span></span><span></span><span></span>
+    return textwrap.dedent("""
+        <div class="msg-row assistant">
+            <div class="msg-avatar">🤖</div>
+            <div class="msg-bubble-wrap">
+                <div class="typing-indicator">
+                    <span></span><span></span><span></span>
+                </div>
             </div>
         </div>
-    </div>
-    """
+    """).strip()
 
 
 def render_chat_header() -> None:
