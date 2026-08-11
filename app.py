@@ -679,6 +679,10 @@ def render_sidebar() -> None:
     except Exception:
         chunk_count = 0
 
+    last_retrieval = getattr(pipeline, "last_query_retrieval", {"memory": 0, "kb": 0})
+    memory_retrieved = last_retrieval.get("memory", 0)
+    kb_retrieved = last_retrieval.get("kb", 0)
+
     try:
         llm_backend = pipeline.llm.llm_type.upper()
     except Exception:
@@ -700,8 +704,16 @@ def render_sidebar() -> None:
             <div class="stat-value">{msg_count}</div>
         </div>
         <div class="stat-card">
-            <div class="stat-label">🧠 Memory Chunks</div>
+            <div class="stat-label">🧠 Memory Stored</div>
             <div class="stat-value">{chunk_count}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">🔍 Memory Retrieved (last query)</div>
+            <div class="stat-value">{memory_retrieved}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">📚 KB Retrieved (last query)</div>
+            <div class="stat-value">{kb_retrieved}</div>
         </div>
         <div class="stat-card">
             <div class="stat-label">⚡ LLM Backend</div>

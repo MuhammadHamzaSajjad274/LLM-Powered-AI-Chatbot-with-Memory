@@ -10,6 +10,7 @@ models/
 .env
 .env.local
 vectorstore/chroma_db/
+vectorstore/chroma_db_kb/
 mlflow_runs/
 *.db
 .DS_Store
