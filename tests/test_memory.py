@@ -74,7 +74,7 @@ class TestMemory(unittest.TestCase):
         self.assertEqual(history[0]["content"], "Hello")
 
     def test_clear_conversation(self):
-        """Test clearing conversation history."""
+        """Test clearing conversation history and ChromaDB memory collection."""
         self.memory.add_message("user", "Test")
         self.memory.add_message("assistant", "Response")
 
@@ -82,6 +82,7 @@ class TestMemory(unittest.TestCase):
 
         self.assertEqual(len(self.memory.get_conversation_history()), 0)
         self.assertEqual(self.memory.message_count, 0)
+        self.mock_retriever.clear_collection.assert_called_once()
 
 
 if __name__ == "__main__":

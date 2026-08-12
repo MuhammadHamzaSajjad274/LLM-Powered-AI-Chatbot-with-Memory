@@ -56,6 +56,15 @@ class Retriever:
             logger.info(f"Created new collection: {self.collection_name}")
         
         return collection
+
+    def clear_collection(self) -> None:
+        """Delete and recreate the memory collection (conversation chunks and summaries)."""
+        try:
+            self.client.delete_collection(name=self.collection_name)
+            logger.info("Deleted collection: %s", self.collection_name)
+        except Exception:
+            pass
+        self.collection = self._get_or_create_collection()
     
     def retrieve(self, query: str, top_k: Optional[int] = None) -> List[Dict[str, Any]]:
         """

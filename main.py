@@ -299,8 +299,9 @@ Please provide a helpful and accurate response:"""
         return self.memory.get_conversation_history()
     
     def clear_conversation(self) -> None:
-        """Clear the current conversation history."""
+        """Clear UI buffer, in-process history, and long_term_chat_memory in ChromaDB."""
         self.memory.clear_conversation_history()
+        self.last_query_retrieval = {"memory": 0, "kb": 0}
 
 
 def main():

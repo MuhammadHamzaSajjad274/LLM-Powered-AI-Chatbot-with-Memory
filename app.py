@@ -523,19 +523,28 @@ st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
 # Session state initialization
 # ---------------------------------------------------------------------------
 
+
+@st.cache_resource
+def load_pipeline() -> ChatbotPipeline:
+    """Load pipeline once per process (avoids concurrent embedder init on rerun)."""
+    return ChatbotPipeline()
+
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 if "chat_started" not in st.session_state:
     st.session_state.chat_started = False
 
-if "pipeline" not in st.session_state:
-    try:
-        st.session_state.pipeline = ChatbotPipeline()
-        st.session_state.pipeline_error = None
-    except Exception as exc:
-        st.session_state.pipeline = None
-        st.session_state.pipeline_error = str(exc)
+if "pipeline_error" not in st.session_state:
+    st.session_state.pipeline_error = None
+
+try:
+    st.session_state.pipeline = load_pipeline()
+    st.session_state.pipeline_error = None
+except Exception as exc:
+    st.session_state.pipeline = None
+    st.session_state.pipeline_error = str(exc)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -729,6 +738,8 @@ def render_sidebar() -> None:
 
     st.markdown('<div class="sidebar-clear">', unsafe_allow_html=True)
     if st.button("🗑️ Clear Chat", use_container_width=True, key="clear_chat"):
+        # Previously only cleared UI + in-process history; ChromaDB long_term_chat_memory
+        # was left intact so RAG still recalled old facts (fixed after manual Q3-Launch test).
         st.session_state.messages = []
         st.session_state.chat_started = False
         if pipeline is not None:
