@@ -2,15 +2,16 @@
 """
 Ingest FlowBoard knowledge-base markdown files into ChromaDB.
 
-Standalone script — not wired into the Streamlit app.
+Standalone script — also provides run_kb_ingestion() for automatic startup ingestion.
 
-Idempotency: uses clear+rebuild — deletes the flowboard_kb collection
-and re-ingests all files from data/kb/ on every run, so running twice
-produces the same result with no duplicate chunks.
+Manual script idempotency: clear + rebuild on every run.
+Startup auto-ingestion: populate only when collection is empty (no clear).
 """
 
+import logging
 import sys
 from pathlib import Path
+from typing import Any, Dict, Optional
 
 # Ensure project root is on sys.path when run as a script
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -21,8 +22,80 @@ from core.embeddings import Embedder
 from core.kb_retriever import KBRetriever
 from core.utils import ensure_directory, setup_logging
 
+logger = logging.getLogger(__name__)
+
 KB_DIR = PROJECT_ROOT / "data" / "kb"
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+
+
+def run_kb_ingestion(
+    embedder: Optional[Embedder] = None,
+    kb_retriever: Optional[KBRetriever] = None,
+    *,
+    force_rebuild: bool = False,
+    kb_dir: Optional[Path] = None,
+    embedding_model: str = EMBEDDING_MODEL,
+) -> Dict[str, int]:
+    """
+    Read markdown from data/kb/, chunk, embed, and load into the KB collection.
+
+    Args:
+        embedder: Optional shared Embedder instance (created if omitted).
+        kb_retriever: Optional KBRetriever instance (created if omitted).
+        force_rebuild: If True, clear existing collection before ingesting
+            (used by manual script runs). If False, append into current collection.
+        kb_dir: Override path to markdown source directory.
+        embedding_model: Model name when creating a new Embedder.
+
+    Returns:
+        Dict with keys: files_processed, chunks_created, collection_count.
+
+    Raises:
+        FileNotFoundError: If kb_dir is missing or contains no .md files.
+    """
+    source_dir = kb_dir or KB_DIR
+    ensure_directory("vectorstore/chroma_db_kb")
+
+    if not source_dir.is_dir():
+        raise FileNotFoundError(f"Knowledge-base directory not found: {source_dir}")
+
+    md_files = sorted(source_dir.glob("*.md"))
+    if not md_files:
+        raise FileNotFoundError(f"No .md files found in {source_dir}")
+
+    if embedder is None:
+        embedder = Embedder(model_name=embedding_model, device="cpu")
+    if kb_retriever is None:
+        kb_retriever = KBRetriever(embedder=embedder)
+
+    if force_rebuild and kb_retriever.get_collection_count() > 0:
+        kb_retriever.clear_collection()
+        logger.info("KB collection cleared for rebuild")
+
+    all_texts: list[str] = []
+    all_metadatas: list[Dict[str, Any]] = []
+    all_ids: list[str] = []
+
+    for md_file in md_files:
+        chunks = kb_retriever.chunk_markdown_file(md_file)
+        for chunk_text, metadata in chunks:
+            all_texts.append(chunk_text)
+            all_metadatas.append(metadata)
+            all_ids.append(f"{md_file.stem}_chunk_{metadata['chunk_index']}")
+
+    if all_texts:
+        kb_retriever.add_documents(
+            texts=all_texts,
+            metadatas=all_metadatas,
+            ids=all_ids,
+        )
+
+    stats = {
+        "files_processed": len(md_files),
+        "chunks_created": len(all_texts),
+        "collection_count": kb_retriever.get_collection_count(),
+    }
+    return stats
 
 
 def main() -> None:
@@ -53,41 +126,28 @@ def main() -> None:
     existing_count = kb.get_collection_count()
     if existing_count > 0:
         print(f"Existing chunks  : {existing_count} (will be cleared)")
-        kb.clear_collection()
-        print("Collection cleared and recreated.")
     else:
         print("Existing chunks  : 0 (fresh ingest)")
 
     print()
-    total_chunks = 0
-    all_texts = []
-    all_metadatas = []
-    all_ids = []
-
     for md_file in md_files:
-        chunks = kb.chunk_markdown_file(md_file)
-        file_chunk_count = len(chunks)
-        total_chunks += file_chunk_count
-        print(f"  {md_file.name:40s} -> {file_chunk_count} chunk(s)")
-
-        for chunk_text, metadata in chunks:
-            stem = md_file.stem
-            chunk_idx = metadata["chunk_index"]
-            all_texts.append(chunk_text)
-            all_metadatas.append(metadata)
-            all_ids.append(f"{stem}_chunk_{chunk_idx}")
+        preview_count = len(kb.chunk_markdown_file(md_file))
+        print(f"  {md_file.name:40s} -> {preview_count} chunk(s)")
 
     print()
-    print(f"Adding {total_chunks} chunks to ChromaDB...")
-    kb.add_documents(texts=all_texts, metadatas=all_metadatas, ids=all_ids)
+    print("Adding chunks to ChromaDB...")
+    stats = run_kb_ingestion(
+        embedder=embedder,
+        kb_retriever=kb,
+        force_rebuild=True,
+    )
 
-    final_count = kb.get_collection_count()
     print()
     print("=" * 50)
     print("Ingestion complete")
-    print(f"  Files processed : {len(md_files)}")
-    print(f"  Chunks created  : {total_chunks}")
-    print(f"  Collection count: {final_count}")
+    print(f"  Files processed : {stats['files_processed']}")
+    print(f"  Chunks created  : {stats['chunks_created']}")
+    print(f"  Collection count: {stats['collection_count']}")
     print("=" * 50)
 
 

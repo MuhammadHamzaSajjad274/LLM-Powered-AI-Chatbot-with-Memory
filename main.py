@@ -78,8 +78,37 @@ class ChatbotPipeline:
             top_k=kb_config.get("top_k", 3),
             kb_distance_threshold=kb_config.get("distance_threshold", DEFAULT_KB_DISTANCE_THRESHOLD),
         )
+        self.kb_ingestion_ran = False
+        self._ensure_kb_populated()
         self.last_query_retrieval = {"memory": 0, "kb": 0}
         self.observer = ChatbotObserver()
+
+    def _ensure_kb_populated(self) -> None:
+        """Run first-time KB ingestion if the collection is empty (e.g. fresh deploy)."""
+        if self.kb_retriever.get_collection_count() > 0:
+            logger.info(
+                "KB collection ready (%d chunks) — skipping ingestion",
+                self.kb_retriever.get_collection_count(),
+            )
+            return
+
+        logger.info("KB collection empty — running first-time ingestion...")
+        try:
+            from scripts.ingest_kb import run_kb_ingestion
+
+            stats = run_kb_ingestion(
+                embedder=self.embedder,
+                kb_retriever=self.kb_retriever,
+                force_rebuild=False,
+            )
+            self.kb_ingestion_ran = True
+            logger.info(
+                "KB ingestion complete: %d chunks loaded from %d files.",
+                stats["collection_count"],
+                stats["files_processed"],
+            )
+        except Exception as e:
+            logger.error("KB first-time ingestion failed: %s", e)
     
     def _build_prompt(self, user_query: str, rag_context: str) -> str:
         """Build the LLM prompt with optional RAG context."""
