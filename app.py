@@ -8,16 +8,18 @@ import textwrap
 from datetime import datetime
 
 import streamlit as st
+from streamlit.errors import StreamlitSecretNotFoundError
 import os
 from main import ChatbotPipeline
 
 
-
-# Bridge Streamlit Cloud secrets to environment variables
-if hasattr(st, 'secrets'):
+# Bridge Streamlit Cloud secrets to environment variables (optional locally — .env is used instead)
+try:
     for key, value in st.secrets.items():
         if isinstance(value, str):
             os.environ[key] = value
+except StreamlitSecretNotFoundError:
+    pass
 st.set_page_config(
     page_title="AI Chatbot",
     page_icon="🤖",
