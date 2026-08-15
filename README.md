@@ -44,13 +44,13 @@ This project solves both problems with **dual retrieval-augmented generation (RA
 
 ## 📸 Preview
 
-![App Preview](assets/preview.png)
+![App Preview](preview.png)
 
 ---
 
 ## 🏗️ Architecture
 
-![Dual RAG chatbot architecture diagram](assets/architecture-diagram.png)
+![Dual RAG chatbot architecture diagram](architecture-diagram.png)
 
 A user query is embedded and checked against two independent ChromaDB collections in parallel — one holding conversation history, the other holding static knowledge-base documents — each with its own similarity threshold. The results are merged into a single labeled RAG context, passed to the configured LLM backend, and streamed back to the UI. The exchange is then stored back into the memory collection, and query metrics are logged to MLflow.
 
