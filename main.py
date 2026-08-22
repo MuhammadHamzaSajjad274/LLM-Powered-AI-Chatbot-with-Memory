@@ -11,6 +11,7 @@ from core.utils import load_config, setup_logging, ensure_directory
 from core.embeddings import Embedder
 from core.llm import LLMModel
 from core.retriever import Retriever
+from core.kb_retriever import KBRetriever, DEFAULT_KB_DISTANCE_THRESHOLD
 from core.memory import Memory
 from core.observability import ChatbotObserver
 
@@ -70,12 +71,49 @@ class ChatbotPipeline:
             llm=self.llm,
             summarization_threshold=memory_config.get("summarization_threshold", 20)
         )
+
+        kb_config = self.config.get("kb", {})
+        self.kb_retriever = KBRetriever(
+            embedder=self.embedder,
+            top_k=kb_config.get("top_k", 3),
+            kb_distance_threshold=kb_config.get("distance_threshold", DEFAULT_KB_DISTANCE_THRESHOLD),
+        )
+        self.kb_ingestion_ran = False
+        self._ensure_kb_populated()
+        self.last_query_retrieval = {"memory": 0, "kb": 0}
         self.observer = ChatbotObserver()
+
+    def _ensure_kb_populated(self) -> None:
+        """Run first-time KB ingestion if the collection is empty (e.g. fresh deploy)."""
+        if self.kb_retriever.get_collection_count() > 0:
+            logger.info(
+                "KB collection ready (%d chunks) — skipping ingestion",
+                self.kb_retriever.get_collection_count(),
+            )
+            return
+
+        logger.info("KB collection empty — running first-time ingestion...")
+        try:
+            from scripts.ingest_kb import run_kb_ingestion
+
+            stats = run_kb_ingestion(
+                embedder=self.embedder,
+                kb_retriever=self.kb_retriever,
+                force_rebuild=False,
+            )
+            self.kb_ingestion_ran = True
+            logger.info(
+                "KB ingestion complete: %d chunks loaded from %d files.",
+                stats["collection_count"],
+                stats["files_processed"],
+            )
+        except Exception as e:
+            logger.error("KB first-time ingestion failed: %s", e)
     
     def _build_prompt(self, user_query: str, rag_context: str) -> str:
         """Build the LLM prompt with optional RAG context."""
         if rag_context:
-            return f"""Based on the following context from previous conversations, please answer the user's question.
+            return f"""Based on the following context, please answer the user's question.
 
 {rag_context}
 
@@ -83,6 +121,25 @@ Current question: {user_query}
 
 Please provide a helpful and accurate response:"""
         return user_query
+
+    @staticmethod
+    def _format_rag_context(
+        kb_chunks: List[Dict],
+        memory_chunks: List[Dict],
+    ) -> str:
+        """Combine KB and memory retrieval results with distinct labels."""
+        sections: List[str] = []
+        if kb_chunks:
+            kb_parts = [doc["text"] for doc in kb_chunks]
+            sections.append(
+                "Relevant information from the knowledge base:\n" + "\n\n".join(kb_parts)
+            )
+        if memory_chunks:
+            mem_parts = [f"Previous conversation: {doc['text']}" for doc in memory_chunks]
+            sections.append(
+                "Relevant information from previous conversations:\n" + "\n\n".join(mem_parts)
+            )
+        return "\n\n".join(sections)
 
     @staticmethod
     def _format_history_as_text(messages: List[Dict[str, str]]) -> str:
@@ -107,7 +164,7 @@ Please provide a helpful and accurate response:"""
             messages.append({
                 "role": "system",
                 "content": (
-                    "Use the following context from previous conversations when relevant:\n\n"
+                    "Use the following context when relevant:\n\n"
                     f"{rag_context}"
                 ),
             })
@@ -121,12 +178,18 @@ Please provide a helpful and accurate response:"""
         Returns:
             Tuple of (prompt string, kwargs dict, retrieved chunks list)
         """
-        retrieved_chunks = self.retriever.retrieve(user_query, top_k=self.retriever.top_k)
-        if retrieved_chunks:
-            context_parts = [f"Previous conversation: {doc['text']}" for doc in retrieved_chunks]
-            rag_context = "\n\n".join(context_parts)
-        else:
-            rag_context = ""
+        memory_chunks = self.retriever.retrieve(user_query, top_k=self.retriever.top_k)
+
+        kb_chunks: List[Dict] = []
+        if self.kb_retriever.get_collection_count() > 0:
+            kb_chunks = self.kb_retriever.retrieve(user_query, top_k=self.kb_retriever.top_k)
+
+        self.last_query_retrieval = {
+            "memory": len(memory_chunks),
+            "kb": len(kb_chunks),
+        }
+
+        rag_context = self._format_rag_context(kb_chunks, memory_chunks)
         history = self.memory.get_conversation_messages()
         llm_type = self.llm.get_type()
         kwargs: dict = {}
@@ -143,7 +206,7 @@ Please provide a helpful and accurate response:"""
         else:
             prompt = self._build_prompt(user_query, rag_context)
 
-        return prompt, kwargs, retrieved_chunks
+        return prompt, kwargs, memory_chunks
 
     def _finalize_response(self, response: str) -> None:
         """Store assistant response and run post-processing."""
@@ -236,8 +299,9 @@ Please provide a helpful and accurate response:"""
         return self.memory.get_conversation_history()
     
     def clear_conversation(self) -> None:
-        """Clear the current conversation history."""
+        """Clear UI buffer, in-process history, and long_term_chat_memory in ChromaDB."""
         self.memory.clear_conversation_history()
+        self.last_query_retrieval = {"memory": 0, "kb": 0}
 
 
 def main():

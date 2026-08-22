@@ -1,0 +1,8 @@
+[33mcommit ead330d81dc68109a7d71470c7661960f7c75ba7[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mhuggingface-deploy[m[33m, [m[1;31morigin/huggingface-deploy[m[33m)[m
+Author: MuhammadHamzaSajjad274 <hamzasajjad274@gmail.com>
+Date:   Sat Aug 1 22:43:19 2026 +0500
+
+    Bridge Streamlit secrets to environment variables
+
+ app.py | 9 [32m++++++++[m[31m-[m
+ 1 file changed, 8 insertions(+), 1 deletion(-)

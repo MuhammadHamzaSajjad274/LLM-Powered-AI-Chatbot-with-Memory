@@ -219,9 +219,15 @@ Summary:"""
         return self.conversation_history.copy()
     
     def clear_conversation_history(self) -> None:
-        """Clear the current conversation history."""
+        """
+        Clear in-process conversation state and wipe persisted long-term memory.
+
+        Removes all conversation_chunk and summary entries from the
+        long_term_chat_memory ChromaDB collection (does not touch flowboard_kb).
+        """
         self.conversation_history = []
         self.message_count = 0
-        logger.info("Cleared conversation history")
+        self.retriever.clear_collection()
+        logger.info("Cleared conversation history and ChromaDB memory collection")
 
 

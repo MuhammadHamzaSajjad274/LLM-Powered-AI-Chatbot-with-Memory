@@ -4,12 +4,22 @@ Stunning animated glassmorphism interface with RAG pipeline backend.
 """
 
 import html
+import textwrap
 from datetime import datetime
 
 import streamlit as st
-
+from streamlit.errors import StreamlitSecretNotFoundError
+import os
 from main import ChatbotPipeline
 
+
+# Bridge Streamlit Cloud secrets to environment variables (optional locally — .env is used instead)
+try:
+    for key, value in st.secrets.items():
+        if isinstance(value, str):
+            os.environ[key] = value
+except StreamlitSecretNotFoundError:
+    pass
 st.set_page_config(
     page_title="AI Chatbot",
     page_icon="🤖",
@@ -513,19 +523,28 @@ st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
 # Session state initialization
 # ---------------------------------------------------------------------------
 
+
+@st.cache_resource
+def load_pipeline() -> ChatbotPipeline:
+    """Load pipeline once per process (avoids concurrent embedder init on rerun)."""
+    return ChatbotPipeline()
+
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 if "chat_started" not in st.session_state:
     st.session_state.chat_started = False
 
-if "pipeline" not in st.session_state:
-    try:
-        st.session_state.pipeline = ChatbotPipeline()
-        st.session_state.pipeline_error = None
-    except Exception as exc:
-        st.session_state.pipeline = None
-        st.session_state.pipeline_error = str(exc)
+if "pipeline_error" not in st.session_state:
+    st.session_state.pipeline_error = None
+
+try:
+    st.session_state.pipeline = load_pipeline()
+    st.session_state.pipeline_error = None
+except Exception as exc:
+    st.session_state.pipeline = None
+    st.session_state.pipeline_error = str(exc)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -618,28 +637,28 @@ def render_message_html(role: str, content: str, timestamp: str) -> str:
     row_cls = "user" if role == "user" else "assistant"
     bubble_cls = "user" if role == "user" else "assistant"
 
-    return f"""
-    <div class="msg-row {row_cls}">
-        <div class="msg-avatar">{avatar}</div>
-        <div class="msg-bubble-wrap">
-            <div class="msg-bubble {bubble_cls}">{safe}</div>
-            <div class="msg-timestamp">{html.escape(timestamp)}</div>
+    return textwrap.dedent(f"""
+        <div class="msg-row {row_cls}">
+            <div class="msg-avatar">{avatar}</div>
+            <div class="msg-bubble-wrap">
+                <div class="msg-bubble {bubble_cls}">{safe}</div>
+                <div class="msg-timestamp">{html.escape(timestamp)}</div>
+            </div>
         </div>
-    </div>
-    """
+    """).strip()
 
 
 def render_typing_html() -> str:
-    return """
-    <div class="msg-row assistant">
-        <div class="msg-avatar">🤖</div>
-        <div class="msg-bubble-wrap">
-            <div class="typing-indicator">
-                <span></span><span></span><span></span>
+    return textwrap.dedent("""
+        <div class="msg-row assistant">
+            <div class="msg-avatar">🤖</div>
+            <div class="msg-bubble-wrap">
+                <div class="typing-indicator">
+                    <span></span><span></span><span></span>
+                </div>
             </div>
         </div>
-    </div>
-    """
+    """).strip()
 
 
 def render_chat_header() -> None:
@@ -671,6 +690,10 @@ def render_sidebar() -> None:
     except Exception:
         chunk_count = 0
 
+    last_retrieval = getattr(pipeline, "last_query_retrieval", {"memory": 0, "kb": 0})
+    memory_retrieved = last_retrieval.get("memory", 0)
+    kb_retrieved = last_retrieval.get("kb", 0)
+
     try:
         llm_backend = pipeline.llm.llm_type.upper()
     except Exception:
@@ -692,8 +715,16 @@ def render_sidebar() -> None:
             <div class="stat-value">{msg_count}</div>
         </div>
         <div class="stat-card">
-            <div class="stat-label">🧠 Memory Chunks</div>
+            <div class="stat-label">🧠 Memory Stored</div>
             <div class="stat-value">{chunk_count}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">🔍 Memory Retrieved (last query)</div>
+            <div class="stat-value">{memory_retrieved}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">📚 KB Retrieved (last query)</div>
+            <div class="stat-value">{kb_retrieved}</div>
         </div>
         <div class="stat-card">
             <div class="stat-label">⚡ LLM Backend</div>
@@ -707,6 +738,8 @@ def render_sidebar() -> None:
 
     st.markdown('<div class="sidebar-clear">', unsafe_allow_html=True)
     if st.button("🗑️ Clear Chat", use_container_width=True, key="clear_chat"):
+        # Previously only cleared UI + in-process history; ChromaDB long_term_chat_memory
+        # was left intact so RAG still recalled old facts (fixed after manual Q3-Launch test).
         st.session_state.messages = []
         st.session_state.chat_started = False
         if pipeline is not None:

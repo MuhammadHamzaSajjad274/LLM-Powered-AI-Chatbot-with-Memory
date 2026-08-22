@@ -35,7 +35,12 @@ class Embedder:
         """Load the sentence-transformers model."""
         try:
             logger.info(f"Loading embeddings model: {self.model_name}")
-            self.model = SentenceTransformer(self.model_name, device=self.device)
+            # low_cpu_mem_usage=False avoids meta-tensor load failures on torch 2.4+
+            self.model = SentenceTransformer(
+                self.model_name,
+                device=self.device,
+                model_kwargs={"low_cpu_mem_usage": False},
+            )
             logger.info(f"Embeddings model loaded successfully on {self.device}")
         except Exception as e:
             logger.error(f"Failed to load embeddings model: {e}")
